@@ -16,13 +16,20 @@ output "ecr_urls" {
 ############################################
 # --- VPC (מהמודול שלך) ---
 ############################################
-module "vpc" {
-  source         = "../modules/vpc"  # עדכני אם שם התיקייה שונה
-  cidr           = var.vpc_cidr
-  name           = "prod-vpc"
-  public_subnets = var.public_subnets
-  private_subnets = var.private_subnets   # ← ודאי שהמודול שלך תומך בפרייבט
-  azs            = var.azs
+mmodule "vpc" {
+  source  = "terraform-aws-modules/vpc/aws"
+  version = "~> 5.0"
+
+  name            = "prod-vpc"
+  cidr            = var.vpc_cidr
+  azs             = var.azs
+  public_subnets  = var.public_subnets
+  private_subnets = var.private_subnets
+
+  enable_nat_gateway = true
+  single_nat_gateway = true
+
+  tags = var.tags
 }
 
 ############################################
@@ -194,17 +201,19 @@ resource "helm_release" "alb_controller" {
   namespace  = "kube-system"
 
   set {
-name = "clusterName"
-value = var.cluster_name
-}
+    name  = "clusterName"
+    value = var.cluster_name
+  }
+
   set {
-name = "region"
-value = var.region 
-}
-  set { 
-name = "vpcId"  
-value = module.vpc.vpc_id
-}
+    name  = "region"
+    value = var.region
+  }
+
+  set {
+    name  = "vpcId"
+    value = module.vpc.vpc_id
+  }
 
   depends_on = [module.eks]
 }
