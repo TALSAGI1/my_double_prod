@@ -69,7 +69,7 @@ module "eks" {
 
   vpc_id     = module.vpc.vpc_id
   # ודאי שלמודול VPC שלך יש אאוטפוט בשם private_subnet_ids:
-  subnet_ids = module.vpc.private_subnet_ids   # ← עדכני אם השם שונה אצלך
+  subnet_ids = module.vpc.private_subnets
 
   enable_irsa = true
 
