@@ -8,6 +8,3 @@ terraform {
   # אם יש לך backend ל-state ב-bootstrap, השאירי אותו שם
 }
 
-provider "aws" {
-  region = var.region
-}
