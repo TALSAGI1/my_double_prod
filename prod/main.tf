@@ -23,7 +23,6 @@ module "vpc" {
   public_subnets = var.public_subnets
   private_subnets = var.private_subnets   # ← ודאי שהמודול שלך תומך בפרייבט
   azs            = var.azs
-  tags           = var.tags
 }
 
 ############################################
