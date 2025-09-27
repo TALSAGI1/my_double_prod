@@ -1,7 +1,6 @@
 ############################################
 # --- ECR (מאגרי תמונות) ---
 ############################################
-# יוצר רפוזיטוריז לפי הרשימה var.ecr_repo_names (מוגדרת ב-variables.tf)
 resource "aws_ecr_repository" "repos" {
   for_each = toset(var.ecr_repo_names)
   name     = each.key
@@ -14,7 +13,7 @@ output "ecr_urls" {
 }
 
 ############################################
-# --- VPC (מהמודול שלך) ---
+# --- VPC (מודול רשמי) ---
 ############################################
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -33,36 +32,14 @@ module "vpc" {
 }
 
 ############################################
-# --- SG (מהמודול שלך) ---
+# --- SG (מודול מקומי שלך) ---
 ############################################
 module "sg" {
-  source        = "../modules/sg"
-  vpc_id        = module.vpc.vpc_id
-  name          = "prod-sg"
-  tags          = var.tags
+  source = "../modules/sg"
+  vpc_id = module.vpc.vpc_id
+  name   = "prod-sg"
+  tags   = var.tags
 }
-
-############################################
-# --- (אופציונלי) EC2 (מיותר ל-EKS) ---
-############################################
-# אם את עוברת ל-EKS אין צורך ב-EC2 הזה. השארתי כאן כהערה לנוחות:
-#
-# data "aws_ami" "al2023" {
-#   most_recent = true
-#   owners      = ["amazon"]
-#   filter { name = "name"; values = ["al2023-ami-*-x86_64"] }
-#   filter { name = "architecture"; values = ["x86_64"] }
-# }
-#
-# module "ec2" {
-#   source        = "../modules/ec2"
-#   name          = var.name
-#   ami           = data.aws_ami.al2023.id
-#   instance_type = var.instance_type
-#   subnet_id     = module.vpc.public_subnet_ids[0]  # ← ודאי שזה האאוטפוט הנכון
-#   sg_id         = module.sg.sg_id
-#   depends_on    = [module.vpc, module.sg]
-# }
 
 ############################################
 # --- EKS (קלאסטר מנוהל + IRSA) ---
@@ -75,8 +52,7 @@ module "eks" {
   cluster_version = "1.29"
 
   vpc_id     = module.vpc.vpc_id
-  # ודאי שלמודול VPC שלך יש אאוטפוט בשם private_subnet_ids:
-  subnet_ids = module.vpc.private_subnets
+  subnet_ids = module.vpc.private_subnets   # במודול הרשמי זה מחזיר IDs
 
   enable_irsa = true
 
@@ -86,7 +62,6 @@ module "eks" {
       min_size       = var.node_min_size
       max_size       = var.node_max_size
       instance_types = var.node_instance_types
-      # אפשר להוסיף labels/taints/volume size וכו'
     }
   }
 
@@ -96,12 +71,14 @@ module "eks" {
 ############################################
 # --- חיבור פרוביידרים ל-EKS (k8s/helm) ---
 ############################################
-# לא נוגעים ב-provider "aws" הקיים אצלך; כאן רק חיבור ל-API של הקלאסטר.
 data "aws_eks_cluster" "this" {
-  name = module.eks.cluster_name
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
 }
+
 data "aws_eks_cluster_auth" "this" {
-  name = module.eks.cluster_name
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
 }
 
 provider "kubernetes" {
@@ -134,13 +111,11 @@ resource "aws_eks_addon" "ebs_csi" {
 ############################################
 # --- ניטור: kube-prometheus-stack (Helm) ---
 ############################################
-# מתקין Prometheus Operator + Prometheus + Grafana.
-# כאן values inline דרך yamlencode כדי שלא תצטרכי קובץ חיצוני.
 resource "helm_release" "kube_prom_stack" {
   name             = "kube-prometheus-stack"
   repository       = "https://prometheus-community.github.io/helm-charts"
   chart            = "kube-prometheus-stack"
-  # version        = "57.2.0"  # אפשר לנעול גרסה
+  # version        = "57.2.0"
   namespace        = "monitoring"
   create_namespace = true
 
@@ -148,7 +123,7 @@ resource "helm_release" "kube_prom_stack" {
     grafana = {
       adminPassword = var.grafana_admin_password
       service = {
-        type = "LoadBalancer"   # להתחלה: NLB פשוט. ל-HTTPS/דומיין העדיפי Ingress+ALB.
+        type = "LoadBalancer"  # להתחלה; ל-HTTPS עדיף Ingress + ALB
       }
     }
     prometheus = {
@@ -158,9 +133,7 @@ resource "helm_release" "kube_prom_stack" {
             spec = {
               accessModes      = ["ReadWriteOnce"]
               storageClassName = var.storage_class_name
-              resources = {
-                requests = { storage = var.prometheus_storage_size }
-              }
+              resources = { requests = { storage = var.prometheus_storage_size } }
             }
           }
         }
@@ -174,25 +147,21 @@ resource "helm_release" "kube_prom_stack" {
 output "grafana_service_hint" {
   value = "Run: kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana"
 }
+
+############################################
+# --- דוגמת פריסה לאפליקציה (Helm מקומית) ---
+############################################
 resource "helm_release" "app" {
   name             = "app"
   chart            = "${path.module}/../charts/app"
   namespace        = "apps"
   create_namespace = true
-
-  # אם תרצי לעדכן tag בלי לערוך קבצים, אפשר להעביר values כאן:
-  # set {
-  #   name  = "image.tag"
-  #   value = "a1b2c3d4"  # למשל sha חדש מה-CD
-  # }
-
-  depends_on = [module.eks]
+  depends_on       = [module.eks]
 }
 
 ############################################
 # --- אופציונלי: AWS Load Balancer Controller (ALB) ---
 ############################################
-# הפעילי דרך var.enable_alb_controller=true אם תרצי Ingress עם ALB/HTTPS/חוקים.
 resource "helm_release" "alb_controller" {
   count      = var.enable_alb_controller ? 1 : 0
   name       = "aws-load-balancer-controller"
