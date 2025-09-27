@@ -118,3 +118,8 @@ variable "tags" {
     project = "my_double_prod"
   }
 }
+variable "ci_deployer_user_arn" {
+  description = "IAM User ARN that applies to the cluster (mapped via aws-auth)"
+  type        = string
+  default     = ""
+}
