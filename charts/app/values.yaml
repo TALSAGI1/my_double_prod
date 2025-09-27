@@ -1,0 +1,12 @@
+image:
+  # דוגמה ל-ECR (החליפי ל-ACCOUNT_ID שלך):
+  repository: each.key.dkr.ecr.eu-west-1.amazonaws.com/guest-app
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP        # לגלישה חיצונית אפשר לשנות ל-LoadBalancer; כרגע משאירים פנימי
+  port: 80
+  targetPort: 8080       # פורט שבו האפליקציה מאזינה בתוך הקונטיינר
+
+replicaCount: 2
