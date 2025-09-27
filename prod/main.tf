@@ -169,6 +169,20 @@ resource "helm_release" "kube_prom_stack" {
 output "grafana_service_hint" {
   value = "Run: kubectl get svc -n monitoring -l app.kubernetes.io/name=grafana"
 }
+resource "helm_release" "app" {
+  name             = "app"
+  chart            = "${path.module}/../charts/app"
+  namespace        = "apps"
+  create_namespace = true
+
+  # אם תרצי לעדכן tag בלי לערוך קבצים, אפשר להעביר values כאן:
+  # set {
+  #   name  = "image.tag"
+  #   value = "a1b2c3d4"  # למשל sha חדש מה-CD
+  # }
+
+  depends_on = [module.eks]
+}
 
 ############################################
 # --- אופציונלי: AWS Load Balancer Controller (ALB) ---
