@@ -52,16 +52,24 @@ module "eks" {
   cluster_version = "1.29"
 
   vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets   # במודול הרשמי זה מחזיר IDs
+  subnet_ids = module.vpc.private_subnets   # במודול הרשמי זה מזהי הסאבטים
 
   enable_irsa = true
 
- # ====== חשוב: פתיחת גישת API ציבורית ======
-  cluster_endpoint_private_access = false
-  cluster_endpoint_public_access  = true
-  # להתחלה אפשר לפתוח לכולם; בהמשך לצמצם ל-CIDR ספציפי
-  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+  # ===== גישת API (זמני בשביל GitHub Actions) =====
+  cluster_endpoint_private_access       = false
+  cluster_endpoint_public_access        = true
+  cluster_endpoint_public_access_cidrs  = ["0.0.0.0/0"]  # לצמצם בהמשך ל-CIDR מוכר
 
+  # ===== RBAC: מיפוי ה-IAM User ל-admin (system:masters) =====
+  manage_aws_auth = true
+  aws_auth_users  = var.ci_deployer_user_arn == "" ? [] : [
+    {
+      userarn  = var.ci_deployer_user_arn      # לדוגמה: arn:aws:iam::864899873766:user/terraform_user
+      username = "terraform-user"
+      groups   = ["system:masters"]
+    }
+  ]
 
   eks_managed_node_groups = {
     default = {
