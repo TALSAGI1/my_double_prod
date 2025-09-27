@@ -195,9 +195,18 @@ resource "helm_release" "alb_controller" {
   chart      = "aws-load-balancer-controller"
   namespace  = "kube-system"
 
-  set { name = "clusterName"; value = var.cluster_name }
-  set { name = "region";      value = var.region }
-  set { name = "vpcId";       value = module.vpc.vpc_id }
+  set {
+name = "clusterName"
+value = var.cluster_name
+}
+  set {
+name = "region"
+value = var.region 
+}
+  set { 
+name = "vpcId"  
+value = module.vpc.vpc_id
+}
 
   depends_on = [module.eks]
 }
