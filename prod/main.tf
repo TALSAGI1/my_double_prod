@@ -74,24 +74,27 @@ module "eks" {
 }
 
 ############################################
-# --- RBAC ל-EKS: aws-auth (גרסת v20) ---
+# --- הרשאות לקלאסטר ע"י EKS Access Entries ---
 ############################################
-module "eks_aws_auth" {
-  source  = "terraform-aws-modules/eks/aws//modules/aws-auth"
-  version = "~> 20.0"
+resource "aws_eks_access_entry" "ci" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = var.ci_deployer_user_arn   # למשל: arn:aws:iam::864899873766:user/terraform_user
+  type          = "STANDARD"
+  depends_on    = [module.eks]
+}
 
-  manage_aws_auth_configmap = true
+resource "aws_eks_access_policy_association" "ci_admin" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = aws_eks_access_entry.ci.principal_arn
 
-  # מיפוי ה-IAM User שלך ל-admin (system:masters)
-  aws_auth_users = var.ci_deployer_user_arn == "" ? [] : [
-    {
-      userarn  = var.ci_deployer_user_arn   # לדוגמה: arn:aws:iam::864899873766:user/terraform_user
-      username = "terraform-user"
-      groups   = ["system:masters"]
-    }
-  ]
+  # מדיניות Admin מנוהלת של AWS (שקולה ל-system:masters ב-RBAC)
+  policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
 
-  depends_on = [module.eks]
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.ci]
 }
 
 ############################################
@@ -165,7 +168,10 @@ resource "helm_release" "kube_prom_stack" {
     }
   })]
 
-  depends_on = [module.eks_aws_auth, aws_eks_addon.ebs_csi]
+  depends_on = [
+    aws_eks_access_policy_association.ci_admin,
+    aws_eks_addon.ebs_csi
+  ]
 }
 
 output "grafana_service_hint" {
@@ -180,7 +186,7 @@ resource "helm_release" "app" {
   chart            = "${path.module}/../charts/app"
   namespace        = "apps"
   create_namespace = true
-  depends_on       = [module.eks_aws_auth]
+  depends_on       = [aws_eks_access_policy_association.ci_admin]
 }
 
 ############################################
@@ -208,5 +214,5 @@ resource "helm_release" "alb_controller" {
     value = module.vpc.vpc_id
   }
 
-  depends_on = [module.eks_aws_auth]
+  depends_on = [aws_eks_access_policy_association.ci_admin]
 }
