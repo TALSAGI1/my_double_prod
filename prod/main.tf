@@ -52,24 +52,14 @@ module "eks" {
   cluster_version = "1.29"
 
   vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.private_subnets   # במודול הרשמי זה מזהי הסאבטים
+  subnet_ids = module.vpc.private_subnets   # מחזיר IDs במודול הרשמי
 
   enable_irsa = true
 
-  # ===== גישת API (זמני בשביל GitHub Actions) =====
-  cluster_endpoint_private_access       = false
-  cluster_endpoint_public_access        = true
-  cluster_endpoint_public_access_cidrs  = ["0.0.0.0/0"]  # לצמצם בהמשך ל-CIDR מוכר
-
-  # ===== RBAC: מיפוי ה-IAM User ל-admin (system:masters) =====
-  manage_aws_auth = true
-  aws_auth_users  = var.ci_deployer_user_arn == "" ? [] : [
-    {
-      userarn  = var.ci_deployer_user_arn      # לדוגמה: arn:aws:iam::864899873766:user/terraform_user
-      username = "terraform-user"
-      groups   = ["system:masters"]
-    }
-  ]
+  # זמני כדי ש-GitHub Actions יוכלו להגיע ל-API; לצמצם בהמשך
+  cluster_endpoint_private_access      = false
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
 
   eks_managed_node_groups = {
     default = {
@@ -81,6 +71,27 @@ module "eks" {
   }
 
   tags = var.tags
+}
+
+############################################
+# --- RBAC ל-EKS: aws-auth (גרסת v20) ---
+############################################
+module "eks_aws_auth" {
+  source  = "terraform-aws-modules/eks/aws//modules/aws-auth"
+  version = "~> 20.0"
+
+  manage_aws_auth_configmap = true
+
+  # מיפוי ה-IAM User שלך ל-admin (system:masters)
+  aws_auth_users = var.ci_deployer_user_arn == "" ? [] : [
+    {
+      userarn  = var.ci_deployer_user_arn   # לדוגמה: arn:aws:iam::864899873766:user/terraform_user
+      username = "terraform-user"
+      groups   = ["system:masters"]
+    }
+  ]
+
+  depends_on = [module.eks]
 }
 
 ############################################
@@ -137,9 +148,7 @@ resource "helm_release" "kube_prom_stack" {
   values = [yamlencode({
     grafana = {
       adminPassword = var.grafana_admin_password
-      service = {
-        type = "LoadBalancer"  # להתחלה; ל-HTTPS עדיף Ingress + ALB
-      }
+      service = { type = "LoadBalancer" }   # להתחלה; ל-HTTPS עדיף Ingress + ALB
     }
     prometheus = {
       prometheusSpec = {
@@ -156,7 +165,7 @@ resource "helm_release" "kube_prom_stack" {
     }
   })]
 
-  depends_on = [module.eks, aws_eks_addon.ebs_csi]
+  depends_on = [module.eks_aws_auth, aws_eks_addon.ebs_csi]
 }
 
 output "grafana_service_hint" {
@@ -171,7 +180,7 @@ resource "helm_release" "app" {
   chart            = "${path.module}/../charts/app"
   namespace        = "apps"
   create_namespace = true
-  depends_on       = [module.eks]
+  depends_on       = [module.eks_aws_auth]
 }
 
 ############################################
@@ -199,5 +208,5 @@ resource "helm_release" "alb_controller" {
     value = module.vpc.vpc_id
   }
 
-  depends_on = [module.eks]
+  depends_on = [module.eks_aws_auth]
 }
