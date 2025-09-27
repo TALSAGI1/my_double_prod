@@ -1,0 +1,15 @@
+grafana:
+  adminPassword: "ChangeMe123!"   # החליפי לפני פרודקשן / השתמשי ב-TF var
+  service:
+    type: LoadBalancer            # הכי קל להתחלה: מקים NLB עם IP חיצוני
+
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi       # אפשר לשנות דרך var
+          storageClassName: gp3   # ודאי שיש StorageClass בשם gp3 בקלאסטר
