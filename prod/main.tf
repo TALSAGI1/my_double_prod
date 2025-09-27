@@ -56,6 +56,13 @@ module "eks" {
 
   enable_irsa = true
 
+ # ====== חשוב: פתיחת גישת API ציבורית ======
+  cluster_endpoint_private_access = false
+  cluster_endpoint_public_access  = true
+  # להתחלה אפשר לפתוח לכולם; בהמשך לצמצם ל-CIDR ספציפי
+  cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+
+
   eks_managed_node_groups = {
     default = {
       desired_size   = var.node_desired_size
