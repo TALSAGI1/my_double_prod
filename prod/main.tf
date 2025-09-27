@@ -33,7 +33,6 @@ module "sg" {
   source        = "../modules/sg"
   vpc_id        = module.vpc.vpc_id
   name          = "prod-sg"
-  allowed_ports = var.allowed_ports
   tags          = var.tags
 }
 
