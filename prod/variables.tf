@@ -119,7 +119,8 @@ variable "tags" {
   }
 }
 variable "ci_deployer_user_arn" {
-  description = "IAM User ARN that applies to the cluster (mapped via aws-auth)"
   type        = string
-  default     = ""
+  description = "IAM User/Role ARN with admin access to EKS via Access Entries"
+  default     = "arn:aws:iam::864899873766:user/terraform_user"
 }
+
